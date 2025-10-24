@@ -1,0 +1,1 @@
+lst_allowed_pieces = ['pawn', 'rook', 'knight', 'bishop', 'queen', 'king']
