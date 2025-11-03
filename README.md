@@ -26,8 +26,8 @@ Endpoints principaux:
 - `POST /move` body: `{ "player_id": n, "move": { "from": "e2", "to": "e4", "piece": "pawn" } }`
 
 Boutique:
-- `GET /shop?player_id=0&rarity=common` -> 3 offres semi-aléatoires de la rareté (prix selon rareté)
-- `POST /buy` body: `{ "player_id": n, "oid": "common-reduce_cd_all_1-XXXX" }`
+- `GET /shop?player_id=0&rarity=silver` -> offres semi-aléatoires de la rareté (prix selon rareté: silver=4, gold=8, platinium=14)
+- `POST /buy` body: `{ "player_id": n, "oid": "silver-reduce_cd_all_1-XXXX" }`
 - `POST /set_board` body: `{ "player_id": n, "layout": [ {"pos":"a2","name":"pawn"}, ... ] }`
 - `POST /ready` body: `{ "player_id": n, "ready": true }`
 
@@ -39,7 +39,7 @@ Boutique:
 
 ## Boutique (MVP)
 
-- Choix par rareté: Common, Rare, Epic, Legendary (3 offres).
+- Choix par rareté: Silver (Argent), Gold (Or), Platinium (Platine) (3 offres).
 - Types d’offres:
   - Upgrades (ex: réduction globale des CD, portée Archer +1/+2).
   - Nouvelles pièces (ajoutées à ton inventaire).
