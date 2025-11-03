@@ -1,33 +1,34 @@
-from classes import *
-from globals import *
+# Catalogues d'upgrades définis via la classe Upgrade (conservée)
+# NB: on n'importe pas Game ici pour éviter l'import circulaire;
+# la classe Upgrade vient de server/classes.py au runtime via server_main.
 
+from classes import Upgrade  # garantit que la classe est bien utilisée
 
-# initialisation des upgrades
-# silver upgrades
-
+# Silver
 upgrades_silver = [
     Upgrade("Extra HP", "Augmente de 2 tes PV"),
     Upgrade("Gold Boost", "Reçois 3 pièces d'or supplémentaires par manche"),
-    Upgrade("Regicide","réduit de 20% le cd de votre pièce qui capture le roi adverse"),
-    Upgrade("pions sprinteurs","vos pions peuvent avancer de 3 cases lors de leur premier déplacement"),
-    Upgrade("Aspiration d'âme","Lorsque vous gagnez une manche vous récupérez 0.5 point de vie"),
-    Upgrade("Recolte d'ame","Lorsque vous capturez une pièce adverse, vous récupérez 0.1 point de vie"),
+    Upgrade("Regicide", "Réduit de 20% le cd de ta pièce qui capture le roi adverse"),
+    Upgrade("pions sprinteurs", "Tes pions peuvent avancer de 3 cases lors de leur premier déplacement"),
+    Upgrade("Aspiration d'âme", "Quand tu gagnes une manche tu récupères 0.5 point de vie"),
+    Upgrade("Recolte d'ame", "Quand tu captures une pièce adverse, tu récupères 0.1 point de vie"),
 ]
 
+# Gold
 upgrades_gold = [
-    Upgrade("Fusion calculée","Si vos deux tours se retrouvent cote a cote, elles fusionnent pour donner un dragon"),
-    Upgrade("Echange de pouvoir","Capacité active : échanger la position du roi et de la reine une fois par partie"),
-    Upgrade("Marathonien","Vos pions peuvent se déplacer de 2 cases à chaque tour"),
-    Upgrade("Assassinat royal","Si votre roi capture une pièce adverse, il peut rejouer immédiatement"),
-    Upgrade("Marche arrière","Vos pions peuvent se déplacer en arrière comme les autres pièces"),
-    Upgrade("Force Royale","Votre roi peut se déplacer d'une case de plus dans toutes les directions"),
-    Upgrade("Psychose passagère","Si deux de vos pions se trouvent l'un au dessus de l'autre (pions passés), ils fuisonnent pour devenir un fou"),
-    Upgrade("Collection de Couronnes","Chaque manche gagnée vous rapporte 4 pièces (cumulable), Mais vous perdez l'effet de cet item en cas de défaite")
+    Upgrade("Fusion calculée", "Si tes deux tours se retrouvent côte à côte, elles fusionnent en Dragon"),
+    Upgrade("Echange de pouvoir", "Capacité active: échanger une fois par partie le roi et la reine"),
+    Upgrade("Marathonien", "Tes pions peuvent se déplacer de 2 cases à chaque coup"),
+    Upgrade("Assassinat royal", "Si ton roi capture, il peut rejouer immédiatement (cd annulé)"),
+    Upgrade("Marche arrière", "Tes pions peuvent se déplacer en arrière"),
+    Upgrade("Force Royale", "Ton roi peut se déplacer d'une case de plus dans toutes les directions"),
+    Upgrade("Psychose passagère", "Deux pions superposés fusionnent en Fou"),
+    Upgrade("Collection de Couronnes", "Chaque manche gagnée +4 or (cumulable), perdu en cas de défaite"),
 ]
 
-
+# Platinium (orthographe d’origine conservée)
 upgrades_platinium = [
-    Upgrade("Furie des Pions", "Si un de tes pions capture une pièce adverse, il annule son cd"),
-    Upgrade("Sexo-permutation","Votre roi obtient les déplacements de la reine"),
-    Upgrade("")
+    Upgrade("Furie des Pions", "Si un de tes pions capture, il annule son cd"),
+    Upgrade("Sexo-permutation", "Ton roi obtient les déplacements de la reine"),
+    # Tu peux en ajouter d'autres ici
 ]
