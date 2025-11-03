@@ -182,7 +182,7 @@ class Game:
             p.hp = p.max_hp
             p.gold = 0
             p.ready = False
-            p.inventory = copy.deepcopy(p.base_inventory())
+            p.inventory = {}  # Inventaire vide au départ, ne contient QUE les achats
             if p.desired_layout is None:
                 p.desired_layout = self.default_layout_for(p.color)
         self.start_round()
@@ -262,6 +262,14 @@ class Game:
                         if upg.name == "Extra HP":
                             player.max_hp += 2
                             player.hp = min(player.max_hp, player.hp + 2)
+                        player.gold -= price
+                        offers.remove(off)
+                        return True, "ok"
+                    elif off['type'] == 'piece':
+                        piece_name = off['piece']
+                        if piece_name not in lst_allowed_pieces:
+                            return False, "invalid_piece"
+                        player.inventory[piece_name] = player.inventory.get(piece_name, 0) + 1
                         player.gold -= price
                         offers.remove(off)
                         return True, "ok"

@@ -5,7 +5,7 @@ import threading
 import time
 
 # Config Pygame
-WIDTH, HEIGHT = 8 * 80, 8 * 80 + 160  # un peu plus haut pour la boutique
+WIDTH, HEIGHT = 960, 8 * 80 + 160  # élargi pour la boutique
 TILE = 80
 FPS = 60
 
@@ -40,7 +40,7 @@ class Client:
         self.running = True
 
         # UI state
-        self.view = 'menu'  # 'menu', 'game', 'rules', 'shop'
+        self.view = 'menu'  # 'menu', 'game', 'rules', 'shop', 'waiting', 'game_over'
         self.server_addr = "http://127.0.0.1:5000"
         self.player_name = "player"
         self.player_id = None
@@ -55,7 +55,7 @@ class Client:
 
         # Shop UI
         self.shop_offers = []  # last fetched offers
-        self.shop_rarity = 'common'
+        self.shop_rarity = 'silver'
         self.palette_choice = None  # piece name selected to place
         self.local_layout = []  # [{'name':'pawn','pos':'a2'}, ...]
 
@@ -105,6 +105,32 @@ class Client:
         self.draw_text("Retour", back_rect.x+40, back_rect.y+10)
         return back_rect
 
+    def draw_waiting(self):
+        self.screen.fill(BG)
+        self.draw_text("En attente d'un adversaire...", WIDTH//2 - 200, HEIGHT//2 - 40, YELLOW, self.bigfont)
+        if self.state:
+            pl = self.state['players']
+            self.draw_text(f"Joueurs connectés: {len(pl)}/2", WIDTH//2 - 120, HEIGHT//2 + 20, WHITE)
+
+    def draw_game_over(self):
+        self.screen.fill(BG)
+        self.draw_text("Partie Terminée!", WIDTH//2 - 150, HEIGHT//2 - 80, YELLOW, self.bigfont)
+        if self.state:
+            pl = self.state['players']
+            winner = None
+            for p in pl:
+                if p['hp'] > 0:
+                    winner = p
+                    break
+            if winner:
+                self.draw_text(f"Gagnant: {winner['username']} ({winner['color']})", WIDTH//2 - 180, HEIGHT//2 - 20, GREEN, self.bigfont)
+            else:
+                self.draw_text("Match nul!", WIDTH//2 - 80, HEIGHT//2 - 20, WHITE, self.bigfont)
+        quit_rect = pygame.Rect(WIDTH//2 - 80, HEIGHT//2 + 60, 160, 40)
+        pygame.draw.rect(self.screen, RED, quit_rect, border_radius=6)
+        self.draw_text("Quitter", quit_rect.x+50, quit_rect.y+10)
+        return quit_rect
+
     def connect(self):
         try:
             r = requests.post(f"{self.server_addr}/connect", json={'name': self.player_name}, timeout=5)
@@ -117,7 +143,16 @@ class Client:
                     if p['id'] == self.player_id:
                         self.player_color = p['color']
                 self.start_polling()
-                self.view = 'game' if self.state['current_state'] == 'in_game' else 'shop'
+                # Définir la vue selon l'état du serveur
+                current_state = self.state['current_state']
+                if current_state == 'waiting':
+                    self.view = 'waiting'
+                elif current_state == 'in_game':
+                    self.view = 'game'
+                elif current_state == 'shop':
+                    self.view = 'shop'
+                elif current_state == 'game_over':
+                    self.view = 'game_over'
                 self.last_error = ""
             else:
                 self.last_error = r.json().get('status', 'erreur_connexion')
@@ -137,11 +172,16 @@ class Client:
                 st = requests.get(f"{self.server_addr}/state", timeout=5).json()
                 self.state = st
                 # switch view selon phase
-                if st['current_state'] == 'shop' and self.view != 'shop':
+                current_state = st['current_state']
+                if current_state == 'waiting' and self.view != 'waiting':
+                    self.view = 'waiting'
+                elif current_state == 'in_game' and self.view != 'game':
+                    self.view = 'game'
+                elif current_state == 'shop' and self.view != 'shop':
                     self.view = 'shop'
                     self.fetch_offers(self.shop_rarity)
-                if st['current_state'] == 'in_game' and self.view != 'game':
-                    self.view = 'game'
+                elif current_state == 'game_over' and self.view != 'game_over':
+                    self.view = 'game_over'
             except Exception:
                 pass
             time.sleep(0.25)
@@ -305,71 +345,79 @@ class Client:
         rem = max(0, deadline - int(time.time())) if deadline else 0
         self.draw_text(f"Or: {gold} | Temps restant: {rem}s", 20, 50, WHITE)
 
-        # boutons rareté
-        rarities = [('common', GREY), ('rare', BLUE), ('epic', PURPLE), ('legendary', YELLOW)]
+        # boutons rareté (silver, gold, platinium)
+        rarities = [('silver', GREY, 'Argent'), ('gold', YELLOW, 'Or'), ('platinium', PURPLE, 'Platine')]
         rrects = []
         x = 20
-        for r, col in rarities:
+        for r, col, label in rarities:
             rect = pygame.Rect(x, 80, 140, 36)
             pygame.draw.rect(self.screen, col if self.shop_rarity==r else DARK, rect, border_radius=6)
-            label = r.capitalize()
             self.draw_text(label, rect.x+10, rect.y+8, BLACK if self.shop_rarity==r else WHITE)
             rrects.append((r, rect))
             x += 150
 
-        # Offres (3 colonnes)
+        # Offres (2 colonnes sur la gauche)
         ox = 20
         oy = 130
         orects = []
-        for off in self.shop_offers:
-            rect = pygame.Rect(ox, oy, 240, 90)
+        for i, off in enumerate(self.shop_offers):
+            if i >= 4:  # Maximum 4 offres visibles
+                break
+            if i > 0 and i % 2 == 0:
+                ox = 20
+                oy += 110
+            rect = pygame.Rect(ox, oy, 280, 100)
             pygame.draw.rect(self.screen, DARK, rect, border_radius=8)
-            self.draw_text(off['name'], rect.x+10, rect.y+8, WHITE)
-            self.draw_text(off['desc'], rect.x+10, rect.y+36, LIGHT)
-            self.draw_text(f"Prix: {off['price']}", rect.x+10, rect.y+60, YELLOW)
-            buy_btn = pygame.Rect(rect.right-80, rect.y+54, 70, 26)
+            self.draw_text(off['name'][:30], rect.x+10, rect.y+8, WHITE)
+            self.draw_text(off['desc'][:35], rect.x+10, rect.y+36, LIGHT)
+            self.draw_text(f"Prix: {off['price']}", rect.x+10, rect.y+64, YELLOW)
+            buy_btn = pygame.Rect(rect.right-80, rect.y+68, 70, 26)
             pygame.draw.rect(self.screen, BLUE, buy_btn, border_radius=6)
             self.draw_text("Acheter", buy_btn.x+4, buy_btn.y+4)
             orects.append((off['oid'], buy_btn))
-            ox += 260
+            ox += 300
 
-        # Editeur de board simplifié (clic to remove/place)
-        self.draw_text("Editeur de board:", 20, 240, WHITE)
-        board_top = 270
+        # Editeur de board simplifié (partie droite)
+        board_left = 640
+        self.draw_text("Editeur de board:", board_left, 130, WHITE)
+        board_top = 160
         for row in range(8):
             for col in range(8):
-                rect = pygame.Rect(col*TILE, board_top + row*TILE//2, TILE//2, TILE//2)
+                rect = pygame.Rect(board_left + col*35, board_top + row*35, 35, 35)
                 color = LIGHT if (row+col) % 2 == 0 else DARK
                 pygame.draw.rect(self.screen, color, rect)
-        # palette (inventaire)
+        
+        # palette (inventaire) - partie droite
         inv = you.get('inventory', {}) if you else {}
         base_counts = {'king':1,'queen':1,'rook':2,'bishop':2,'knight':2,'pawn':8}
         total_counts = {k: base_counts.get(k,0)+inv.get(k,0) for k in set(base_counts)|set(inv)}
-        px = 8*TILE + 20
-        py = 270
+        px = board_left
+        py = board_top + 8*35 + 20
         self.draw_text("Palette:", px, py, WHITE); py += 26
         palette_rects = []
         for name, count in sorted(total_counts.items()):
-            rect = pygame.Rect(8*TILE + 20, py, 140, 28)
+            if py > HEIGHT - 80:
+                break
+            rect = pygame.Rect(px, py, 140, 28)
             pygame.draw.rect(self.screen, DARK if self.palette_choice != name else BLUE, rect, border_radius=6)
             self.draw_text(f"{name} x{count}", rect.x+6, rect.y+6)
             palette_rects.append((name, rect))
             py += 34
 
-        # boutons
-        ready_rect = pygame.Rect(8*TILE + 20, HEIGHT - 60, 150, 40)
-        save_rect = pygame.Rect(8*TILE + 190, HEIGHT - 60, 150, 40)
+        # boutons (partie droite)
+        ready_rect = pygame.Rect(board_left, HEIGHT - 60, 140, 40)
+        save_rect = pygame.Rect(board_left + 160, HEIGHT - 60, 140, 40)
         pygame.draw.rect(self.screen, GREEN, ready_rect, border_radius=6)
         pygame.draw.rect(self.screen, YELLOW, save_rect, border_radius=6)
-        self.draw_text("Je suis prêt", ready_rect.x+20, ready_rect.y+10, BLACK)
-        self.draw_text("Sauvegarder", save_rect.x+16, save_rect.y+10, BLACK)
+        self.draw_text("Je suis prêt", ready_rect.x+15, ready_rect.y+10, BLACK)
+        self.draw_text("Sauvegarder", save_rect.x+15, save_rect.y+10, BLACK)
 
         # infos / erreurs
         if self.last_error:
             self.draw_text(f"Erreur: {self.last_error}", 20, HEIGHT - 30, RED)
 
         return {'rarities': rrects, 'offers': orects, 'palette': palette_rects,
-                'ready': ready_rect, 'save': save_rect, 'board_top': board_top}
+                'ready': ready_rect, 'save': save_rect, 'board_top': board_top, 'board_left': board_left}
 
     def handle_shop_click(self, pos, ui):
         # cliquer rareté
@@ -390,9 +438,10 @@ class Client:
         # cliquer board mini (placement/remove)
         x, y = pos
         bt = ui['board_top']
-        if y >= bt and y < bt + 8*TILE//2 and x < 8*TILE//2:
-            col = x // (TILE//2)
-            row = (y - bt) // (TILE//2)
+        bl = ui['board_left']
+        if y >= bt and y < bt + 8*35 and x >= bl and x < bl + 8*35:
+            col = (x - bl) // 35
+            row = (y - bt) // 35
             alg = to_alg(col, row)  # rang 1 en haut (même conv.)
             # contrainte rangs autorisés localement
             allowed = {'white': {0,1}, 'black': {6,7}}[self.player_color]
@@ -467,17 +516,26 @@ class Client:
                     if event.type == pygame.MOUSEBUTTONDOWN:
                         ui = self.draw_shop()  # pour les rects courants
                         self.handle_shop_click(event.pos, ui)
+                elif self.view == 'game_over':
+                    if event.type == pygame.MOUSEBUTTONDOWN:
+                        quit_rect = self.draw_game_over()
+                        if quit_rect.collidepoint(event.pos):
+                            self.running = False
 
             # draw
             if self.view == 'menu':
                 self.draw_menu()
             elif self.view == 'rules':
                 self.draw_rules()
+            elif self.view == 'waiting':
+                self.draw_waiting()
             elif self.view == 'game':
                 self.screen.fill(BG)
                 self.draw_board()
             elif self.view == 'shop':
                 self.draw_shop()
+            elif self.view == 'game_over':
+                self.draw_game_over()
 
             pygame.display.flip()
             self.clock.tick(FPS)

@@ -10,10 +10,12 @@ from init import upgrades_silver, upgrades_gold, upgrades_platinium
 
 app = Flask(__name__)
 game = Game()
+state_lock = threading.Lock()
 
 def cooldown_ticker():
     while True:
-        game.tick_cooldowns()
+        with state_lock:
+            game.tick_cooldowns()
         time.sleep(TICK_INTERVAL_SECONDS)
 
 def get_local_ip():
@@ -35,13 +37,14 @@ def connect_player():
     player_name = data.get('name')
     if not player_name:
         return jsonify({'status':'error','error':'missing_name'}), 400
-    player_id = game.add_player(player_name)
-    if player_id is not None:
-        if len(game.players) == MAX_PLAYERS and game.current_state == 'waiting':
-            game.start_game()
-        return jsonify({'status':'connected','player_id':player_id})
-    else:
-        return jsonify({'status':'full'}), 403
+    with state_lock:
+        player_id = game.add_player(player_name)
+        if player_id is not None:
+            if len(game.players) == MAX_PLAYERS and game.current_state == 'waiting':
+                game.start_game()
+            return jsonify({'status':'connected','player_id':player_id})
+        else:
+            return jsonify({'status':'full'}), 403
 
 def parse_move_payload(data):
     frm = data.get('from'); to = data.get('to'); piece = data.get('piece')
@@ -49,6 +52,11 @@ def parse_move_payload(data):
     else: fx, fy = frm.get('x'), int(frm.get('y'))
     if isinstance(to, str): tx, ty = to[0], int(to[1:])
     else: tx, ty = to.get('x'), int(to.get('y'))
+    # Validation basique des coordonnées
+    if fx not in 'abcdefgh' or tx not in 'abcdefgh':
+        raise Exception("Invalid column (must be a-h)")
+    if fy < 1 or fy > 8 or ty < 1 or ty > 8:
+        raise Exception("Invalid row (must be 1-8)")
     return {'from': (fx, fy), 'to': (tx, ty), 'piece': piece}
 
 @app.route('/move', methods=['POST'])
@@ -61,13 +69,14 @@ def make_move():
         move = parse_move_payload(move_raw)
     except Exception:
         return jsonify({'success':False,'error':'invalid_move_format'}), 400
-    ok, reason = game.make_move(int(player_id), move)
-    if ok:
-        return jsonify({'success':True, 'state': game.game_state()})
-    else:
-        return jsonify({'success':False, 'error':reason, 'state': game.game_state()}), 400
+    with state_lock:
+        ok, reason = game.make_move(int(player_id), move)
+        if ok:
+            return jsonify({'success':True, 'state': game.game_state()})
+        else:
+            return jsonify({'success':False, 'error':reason, 'state': game.game_state()}), 400
 
-# ======== Boutique (Upgrade objets) ========
+# ======== Boutique (Upgrade objets + pièces) ========
 
 RARITY_TO_POOL = {
     'silver': upgrades_silver,
@@ -75,41 +84,63 @@ RARITY_TO_POOL = {
     'platinium': upgrades_platinium,
 }
 
+# Pool de pièces achetables par rareté (MVP)
+RARITY_TO_PIECES = {
+    'silver': ['archer', 'sappeur', 'fantome'],
+    'gold': ['archer', 'sappeur', 'fantome'],
+    'platinium': ['dragon'],
+}
+
 @app.route('/shop', methods=['GET'])
 def get_shop_offers():
     player_id = request.args.get('player_id', type=int)
     rarity = request.args.get('rarity', default='silver', type=str)
-    if player_id is None or player_id < 0 or player_id >= len(game.players):
-        return jsonify({'success':False,'error':'invalid_player'}), 400
-    if game.current_state != 'shop':
-        return jsonify({'success':False,'error':'not_in_shop', 'state': game.game_state()}), 400
-    if rarity not in RARITIES:
-        return jsonify({'success':False,'error':'invalid_rarity'}), 400
-    # Générer si pas déjà fait
-    bucket = game.shop_offers.get(player_id, {}).get(rarity)
-    if not bucket:
-        pool = RARITY_TO_POOL.get(rarity, [])
-        offers = random.sample(pool, k=min(3, len(pool))) if pool else []
-        priced = []
-        for upg in offers:
-            # Clone léger pour annoter la rareté (n'affecte pas le catalogue)
-            u = Upgrade(upg.name, upg.description, uid=upg.id, rarity=rarity)
-            priced.append({
-                'type': 'upgrade',
-                'upgrade': u,
-                'name': u.name,
-                'desc': u.description,
-                'rarity': rarity,
-                'price': RARITIES[rarity]['price'],
-                'oid': f"{rarity}-{u.id}-{random.randint(1000,9999)}"
-            })
-        game.store_offers(player_id, rarity, priced)
-        bucket = priced
-    # Sérialisation pour le client
-    resp_offers = [{'name': o['name'], 'desc': o['desc'], 'rarity': o['rarity'],
-                    'price': o['price'], 'oid': o['oid']} for o in bucket]
-    return jsonify({'success':True, 'rarity':rarity, 'offers':resp_offers,
-                    'gold': game.players[player_id].gold, 'deadline': game.shop_deadline})
+    with state_lock:
+        if player_id is None or player_id < 0 or player_id >= len(game.players):
+            return jsonify({'success':False,'error':'invalid_player'}), 400
+        if game.current_state != 'shop':
+            return jsonify({'success':False,'error':'not_in_shop', 'state': game.game_state()}), 400
+        if rarity not in RARITIES:
+            return jsonify({'success':False,'error':'invalid_rarity'}), 400
+        # Générer si pas déjà fait
+        bucket = game.shop_offers.get(player_id, {}).get(rarity)
+        if not bucket:
+            priced = []
+            # Générer des upgrades
+            pool = RARITY_TO_POOL.get(rarity, [])
+            upgrade_offers = random.sample(pool, k=min(2, len(pool))) if pool else []
+            for upg in upgrade_offers:
+                # Clone léger pour annoter la rareté (n'affecte pas le catalogue)
+                u = Upgrade(upg.name, upg.description, uid=upg.id, rarity=rarity)
+                priced.append({
+                    'type': 'upgrade',
+                    'upgrade': u,
+                    'name': u.name,
+                    'desc': u.description,
+                    'rarity': rarity,
+                    'price': RARITIES[rarity]['price'],
+                    'oid': f"{rarity}-{u.id}-{random.randint(1000,9999)}"
+                })
+            # Générer des pièces
+            piece_pool = RARITY_TO_PIECES.get(rarity, [])
+            piece_offers = random.sample(piece_pool, k=min(1, len(piece_pool))) if piece_pool else []
+            for piece_name in piece_offers:
+                priced.append({
+                    'type': 'piece',
+                    'piece': piece_name,
+                    'name': f'Nouvelle pièce : {piece_name.capitalize()}',
+                    'desc': f"Ajoute {piece_name.capitalize()} x1 à l'inventaire",
+                    'rarity': rarity,
+                    'price': RARITIES[rarity]['price'],
+                    'oid': f"{rarity}-piece-{piece_name}-{random.randint(1000,9999)}"
+                })
+            game.store_offers(player_id, rarity, priced)
+            bucket = priced
+        # Sérialisation pour le client
+        resp_offers = [{'name': o['name'], 'desc': o['desc'], 'rarity': o['rarity'],
+                        'price': o['price'], 'oid': o['oid']} for o in bucket]
+        return jsonify({'success':True, 'rarity':rarity, 'offers':resp_offers,
+                        'gold': game.players[player_id].gold, 'deadline': game.shop_deadline})
 
 @app.route('/buy', methods=['POST'])
 def buy_offer():
@@ -117,13 +148,14 @@ def buy_offer():
     player_id = data.get('player_id'); oid = data.get('oid')
     if player_id is None or oid is None:
         return jsonify({'success':False,'error':'missing_params'}), 400
-    if game.current_state != 'shop':
-        return jsonify({'success':False,'error':'not_in_shop'}), 400
-    ok, msg = game.apply_purchase(int(player_id), oid)
-    if ok:
-        return jsonify({'success':True, 'gold': game.players[int(player_id)].gold})
-    else:
-        return jsonify({'success':False, 'error': msg}), 400
+    with state_lock:
+        if game.current_state != 'shop':
+            return jsonify({'success':False,'error':'not_in_shop'}), 400
+        ok, msg = game.apply_purchase(int(player_id), oid)
+        if ok:
+            return jsonify({'success':True, 'gold': game.players[int(player_id)].gold})
+        else:
+            return jsonify({'success':False, 'error': msg}), 400
 
 @app.route('/set_board', methods=['POST'])
 def set_board():
@@ -131,11 +163,12 @@ def set_board():
     player_id = data.get('player_id'); layout = data.get('layout', [])
     if player_id is None:
         return jsonify({'success':False,'error':'missing_params'}), 400
-    if game.current_state != 'shop':
-        return jsonify({'success':False,'error':'not_in_shop'}), 400
-    ok, msg = game.validate_and_set_board(int(player_id), layout)
-    if ok: return jsonify({'success':True})
-    return jsonify({'success':False,'error':msg}), 400
+    with state_lock:
+        if game.current_state != 'shop':
+            return jsonify({'success':False,'error':'not_in_shop'}), 400
+        ok, msg = game.validate_and_set_board(int(player_id), layout)
+        if ok: return jsonify({'success':True})
+        return jsonify({'success':False,'error':msg}), 400
 
 @app.route('/ready', methods=['POST'])
 def set_ready():
@@ -143,14 +176,15 @@ def set_ready():
     player_id = data.get('player_id'); ready = bool(data.get('ready', True))
     if player_id is None:
         return jsonify({'success':False,'error':'missing_params'}), 400
-    if game.current_state != 'shop':
-        return jsonify({'success':False,'error':'not_in_shop'}), 400
-    pid = int(player_id)
-    if pid < 0 or pid >= len(game.players):
-        return jsonify({'success':False,'error':'invalid_player'}), 400
-    game.players[pid].ready = ready
-    game.try_start_next_round()
-    return jsonify({'success':True,'ready':ready})
+    with state_lock:
+        if game.current_state != 'shop':
+            return jsonify({'success':False,'error':'not_in_shop'}), 400
+        pid = int(player_id)
+        if pid < 0 or pid >= len(game.players):
+            return jsonify({'success':False,'error':'invalid_player'}), 400
+        game.players[pid].ready = ready
+        game.try_start_next_round()
+        return jsonify({'success':True,'ready':ready})
 
 if __name__ == '__main__':
     t = threading.Thread(target=cooldown_ticker, daemon=True); t.start()

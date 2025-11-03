@@ -16,13 +16,14 @@ upgrades_silver = [
 
 # Gold
 upgrades_gold = [
-    Upgrade("Fusion calculée", "Si tes deux tours se retrouvent côte à côte, elles fusionnent en Dragon"),
-    Upgrade("Echange de pouvoir", "Capacité active: échanger une fois par partie le roi et la reine"),
+    # TODO: Les upgrades suivants ne sont pas implémentés et sont temporairement retirés:
+    # Upgrade("Fusion calculée", "Si tes deux tours se retrouvent côte à côte, elles fusionnent en Dragon"),
+    # Upgrade("Echange de pouvoir", "Capacité active: échanger une fois par partie le roi et la reine"),
+    # Upgrade("Psychose passagère", "Deux pions superposés fusionnent en Fou"),
     Upgrade("Marathonien", "Tes pions peuvent se déplacer de 2 cases à chaque coup"),
     Upgrade("Assassinat royal", "Si ton roi capture, il peut rejouer immédiatement (cd annulé)"),
     Upgrade("Marche arrière", "Tes pions peuvent se déplacer en arrière"),
     Upgrade("Force Royale", "Ton roi peut se déplacer d'une case de plus dans toutes les directions"),
-    Upgrade("Psychose passagère", "Deux pions superposés fusionnent en Fou"),
     Upgrade("Collection de Couronnes", "Chaque manche gagnée +4 or (cumulable), perdu en cas de défaite"),
 ]
 
