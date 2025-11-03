@@ -353,25 +353,173 @@ class Pawn(Piece):
         
         
         return moves
+    
+    
+class Dragon(Piece):
+    # une piece speciale obtenue par fusion de deux tours qui se déplace comme une reine + un cavalier
+    def __init__(self, color):
+        super().__init__('dragon', color, cd_base=1)
         
+    def possible_moves(self, game):
+        moves = []
+        x, y = game.board.index_case(self.position[0], self.position[1])
+        
+        # mouvements de reine
+        directions = [(-1, -1), (-1, 0), (-1, 1),
+                      (0, -1),          (0, 1),
+                      (1, -1), (1, 0), (1, 1)]
+        for dx, dy in directions:
+            nx, ny = x, y
+            while True:
+                nx += dx
+                ny += dy
+                if 0 <= nx < game.board.width and 0 <= ny < game.board.height:
+                    target = game.board.grid[ny][nx]
+                    if target is None:
+                        moves.append((nx, ny))
+                    elif target.color != self.color:
+                        moves.append((nx, ny))
+                        break
+                    else:
+                        break
+                else:
+                    break
+        
+        # mouvements de cavalier
+        knight_moves = [(2, 1), (1, 2), (-1, 2), (-2, 1),
+                        (-2, -1), (-1, -2), (1, -2), (2, -1)]
+        for dx, dy in knight_moves:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < game.board.width and 0 <= ny < game.board.height:
+                target = game.board.grid[ny][nx]
+                if target is None or target.color != self.color:
+                    moves.append((nx, ny))
+        
+        return moves
+    
+class Sappeur(Piece):
+    # une piece spéciale qui se déplace comme un pion mais si il est capturé il tue la piece qui l'a capturé
+    def __init__(self, color):
+        super().__init__('sappeur', color, cd_base=1)
+        
+    def possible_moves(self, game):
+        moves = []
+        x, y = game.board.index_case(self.position[0], self.position[1])
+        direction = 1 if self.color == 'white' else -1
+        
+        # mouvement en avant
+        if 0 <= y + direction < game.board.height and game.board.grid[y + direction][x] is None:
+            moves.append((x, y + direction))
+            # mouvement initial de deux cases
+            if (self.color == 'white' and y == 1) or (self.color == 'black' and y == 6):
+                if game.board.grid[y + 2 * direction][x] is None:
+                    moves.append((x, y + 2 * direction))
+        
+        # captures diagonales
+        for dx in [-1, 1]:
+            nx = x + dx
+            ny = y + direction
+            if 0 <= nx < game.board.width and 0 <= ny < game.board.height:
+                target = game.board.grid[ny][nx]
+                if target is not None and target.color != self.color:
+                    moves.append((nx, ny))
+        
+        
+        return moves
+    
+
+class Archer(Piece):
+    # piece spéciale qui se déplace seulement de 1 en ligne droite mais peut attaquer une piece a distance de 3 cases en ligne droite en ignorant les pieces intermediaires
+    def __init__(self, color):
+        super().__init__('archer', color, cd_base=2)
+        
+    def possible_moves(self, game):
+        moves = []
+        x, y = game.board.index_case(self.position[0], self.position[1])
+        
+        # mouvements de 1 case en ligne droite
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        for dx, dy in directions:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < game.board.width and 0 <= ny < game.board.height:
+                target = game.board.grid[ny][nx]
+                if target is None or target.color != self.color:
+                    moves.append((nx, ny))
+        
+        # attaques a distance de 3 cases en ligne droite
+        for dx, dy in directions:
+            for dist in range(1, 4):
+                nx = x + dx * dist
+                ny = y + dy * dist
+                if 0 <= nx < game.board.width and 0 <= ny < game.board.height:
+                    target = game.board.grid[ny][nx]
+                    if target is not None and target.color != self.color:
+                        moves.append((nx, ny))
+                        break  # ne peut attaquer qu'une piece par direction
+                else:
+                    break
+        
+        return moves
+    
+    
+class Fantome(Piece):
+    # piece spéciale qui peut se déplacer comme un pion mais qui peut etre traversé par des pieces alliées
+    def __init__(self, color):
+        super().__init__('fantome', color, cd_base=1)
+    
+    def possible_moves(self, game):
+        moves = []
+        x, y = game.board.index_case(self.position[0], self.position[1])
+        direction = 1 if self.color == 'white' else -1
+        
+        # mouvement en avant
+        if 0 <= y + direction < game.board.height:
+            target = game.board.grid[y + direction][x]
+            if target is None or target.color != self.color:
+                moves.append((x, y + direction))
+                # mouvement initial de deux cases
+                if (self.color == 'white' and y == 1) or (self.color == 'black' and y == 6):
+                    target2 = game.board.grid[y + 2 * direction][x]
+                    if target2 is None or target2.color != self.color:
+                        moves.append((x, y + 2 * direction))
+        
+        # captures diagonales
+        for dx in [-1, 1]:
+            nx = x + dx
+            ny = y + direction
+            if 0 <= nx < game.board.width and 0 <= ny < game.board.height:
+                target = game.board.grid[ny][nx]
+                if target is not None and target.color != self.color:
+                    moves.append((nx, ny))
+        
+        
+        return moves
+    
+
+    
 class Player:
     def __init__(self, username, color):
         self.username = username
         self.color = color
         self.pieces = []
+        self.hp = 5
+        self.upgrades = []
+        
         
     
 
-    
-        
-        
+class Upgrade:
+    def __init__(self, name, description):
+        self.name = name
+        self.description = description
+
 
     
     
     
 # tests
 
-test_board = Board(8, 8)
+"""test_board = Board(8, 8)
 # remplir le board avec des chiffres pour tester
 for y in range(8):
     for x in range(8):
@@ -382,4 +530,4 @@ test_board.afficher()
 print(test_board.liste_lignes())
 print(test_board.liste_colonnes())
 print(test_board.liste_diagonales())
-
+"""
